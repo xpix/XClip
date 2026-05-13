@@ -44,7 +44,7 @@ Settings are stored in an INI file next to the executable. You can change:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| Max History Size | 25 | Number of entries to keep |
+| Max History Size | 100 | Number of entries to keep |
 | Ignore Duplicates | Yes | Skip duplicate clipboard content |
 | Save History | Yes | Persist history across restarts |
 | Purge Bitmaps on Exit | No | Free bitmap memory on close |

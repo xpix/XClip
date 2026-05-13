@@ -4,7 +4,7 @@
 
 struct Settings {
     // General
-    int maxHistorySize = 25;
+    int maxHistorySize = 100;
     bool ignoreDuplicates = true;
     bool saveHistory = true;
     bool purgeBitmapsOnExit = false;
