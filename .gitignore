@@ -1,0 +1,52 @@
+# Build output
+build/
+Debug/
+Release/
+x64/
+
+# IDE / editor
+.vs/
+*.user
+*.suo
+*.ncb
+*.sdf
+*.opensdf
+*.opendb
+*.db
+*.ipch
+
+# Compiled Object files
+*.obj
+*.o
+*.pch
+
+# Precompiled Headers
+*.gch
+
+# Compiled Dynamic/Static libraries
+*.lib
+*.a
+*.dll
+*.so
+
+# Executables
+*.exe
+
+# Debug files
+*.pdb
+*.ilk
+debug.log
+
+# CMake generated
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
