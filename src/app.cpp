@@ -39,6 +39,10 @@ bool App::CreateHiddenWindow() {
 void App::RegisterHotkeys() {
     hotkeys_.Register(hwnd_, HOTKEY_POPUP,
         settings_.hotkeyModifiers, settings_.hotkeyVK);
+    hotkeys_.Register(hwnd_, HOTKEY_SEARCH,
+        settings_.searchHotkeyModifiers, settings_.searchHotkeyVK);
+    hotkeys_.Register(hwnd_, HOTKEY_NOTES,
+        settings_.notesHotkeyModifiers, settings_.notesHotkeyVK);
 }
 
 void App::UnregisterHotkeys() {
@@ -49,7 +53,13 @@ bool App::Init(HINSTANCE hInstance) {
     hInstance_ = hInstance;
 
     auto dbg = [](const wchar_t* msg) {
-        HANDLE hFile = CreateFileW(L"C:\\Users\\D063239\\Desktop\\XClip\\debug.log",
+        wchar_t exePath[MAX_PATH];
+        GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+        std::wstring logPath(exePath);
+        auto pos = logPath.find_last_of(L'\\');
+        if (pos != std::wstring::npos) logPath = logPath.substr(0, pos);
+        logPath += L"\\debug.log";
+        HANDLE hFile = CreateFileW(logPath.c_str(),
             FILE_APPEND_DATA, FILE_SHARE_READ, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (hFile != INVALID_HANDLE_VALUE) {
             DWORD w;
@@ -70,11 +80,19 @@ bool App::Init(HINSTANCE hInstance) {
     settings_.Load();
 
     dbg(L"  Init: Load icon...");
-    hIcon_ = (HICON)LoadImageW(hInstance, MAKEINTRESOURCE(IDI_XCLIP),
-        IMAGE_ICON, 16, 16, LR_DEFAULTCOLOR);
+    // Use a well-known system icon for the tray (clipboard icon from shell32)
+    hIcon_ = (HICON)LoadImageW(GetModuleHandleW(L"shell32.dll"),
+        MAKEINTRESOURCE(260), IMAGE_ICON,
+        GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_SHARED);
     if (!hIcon_) {
-        dbg(L"  Init: Icon from resource failed, using fallback");
-        hIcon_ = LoadIcon(nullptr, IDI_APPLICATION);
+        dbg(L"  Init: Shell32 icon 260 failed, trying IDI_APPLICATION...");
+        hIcon_ = (HICON)LoadImageW(nullptr, IDI_APPLICATION, IMAGE_ICON,
+            GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_SHARED);
+    }
+    {
+        wchar_t buf[128];
+        wsprintfW(buf, L"  Init: hIcon=%p, SM_CXSMICON=%d", (void*)hIcon_, GetSystemMetrics(SM_CXSMICON));
+        dbg(buf);
     }
 
     dbg(L"  Init: Create window...");
@@ -104,11 +122,24 @@ bool App::Init(HINSTANCE hInstance) {
     }
     dbg(L"  Init: Tray OK");
 
-    dbg(L"  Init: Register hotkey...");
+    // Show startup balloon so user can find the tray icon
+    tray_.ShowBalloon(L"XClip", L"Clipboard Manager is running.\nCtrl+Shift+V = History | Ctrl+Shift+S = Search");
+
+    dbg(L"  Init: Register hotkeys...");
     if (!hotkeys_.Register(hwnd_, HOTKEY_POPUP, settings_.hotkeyModifiers, settings_.hotkeyVK)) {
-        dbg(L"  Init: Hotkey registration failed (non-fatal)");
+        dbg(L"  Init: Popup hotkey registration failed (non-fatal)");
     } else {
-        dbg(L"  Init: Hotkey OK");
+        dbg(L"  Init: Popup hotkey OK");
+    }
+    if (!hotkeys_.Register(hwnd_, HOTKEY_SEARCH, settings_.searchHotkeyModifiers, settings_.searchHotkeyVK)) {
+        dbg(L"  Init: Search hotkey registration failed (non-fatal)");
+    } else {
+        dbg(L"  Init: Search hotkey OK");
+    }
+    if (!hotkeys_.Register(hwnd_, HOTKEY_NOTES, settings_.notesHotkeyModifiers, settings_.notesHotkeyVK)) {
+        dbg(L"  Init: Notes hotkey registration failed (non-fatal)");
+    } else {
+        dbg(L"  Init: Notes hotkey OK");
     }
 
     // Load history from disk
@@ -117,16 +148,40 @@ bool App::Init(HINSTANCE hInstance) {
         history_.LoadFromFile(settings_.historyPath);
     }
 
+    // Load notes
+    notes_.LoadFromFile(settings_.notesPath);
+
+    // Register in Windows autostart
+    {
+        wchar_t exePath[MAX_PATH];
+        GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+        HKEY hKey = nullptr;
+        if (RegOpenKeyExW(HKEY_CURRENT_USER,
+                L"Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS) {
+            RegSetValueExW(hKey, L"XClip", 0, REG_SZ,
+                reinterpret_cast<const BYTE*>(exePath),
+                (DWORD)((wcslen(exePath) + 1) * sizeof(wchar_t)));
+            RegCloseKey(hKey);
+        }
+    }
+
     UpdateTooltip();
 
     return true;
 }
 
 void App::Shutdown() {
+    if (shutdownDone_) return;
+    shutdownDone_ = true;
+
     // Save history
     if (settings_.saveHistory) {
         history_.SaveToFile(settings_.historyPath, settings_.purgeBitmapsOnExit);
     }
+
+    // Save notes
+    notes_.SaveToFile(settings_.notesPath);
 
     UnregisterHotkeys();
     clipboard_.Stop();
@@ -167,11 +222,25 @@ void App::OnHotkey(int id) {
         HWND hwndFg = GetForegroundWindow();
 
         int selected = popup_.Show(hwnd_, history_, settings_);
-        if (selected >= 0 && selected < history_.GetCount()) {
+        if (selected == -2) {
+            // "More items" clicked — open search
+            int idx = ShowSearchDialog(hwnd_, history_);
+            if (idx >= 0) {
+                if (hwndFg) SetForegroundWindow(hwndFg);
+                PasteEntry(idx);
+            }
+        } else if (selected >= 0 && selected < history_.GetCount()) {
             // Restore foreground window
             if (hwndFg) SetForegroundWindow(hwndFg);
             PasteEntry(selected);
         }
+    } else if (id == HOTKEY_SEARCH) {
+        int idx = ShowSearchDialog(hwnd_, history_);
+        if (idx >= 0) {
+            PasteEntry(idx);
+        }
+    } else if (id == HOTKEY_NOTES) {
+        ShowNotes();
     }
 }
 
@@ -183,7 +252,11 @@ void App::PasteEntry(int index) {
 
     // Set the clipboard content
     const ClipEntry& entry = history_.GetEntry(index);
-    entry.RestoreToClipboard(hwnd_);
+    if (!entry.RestoreToClipboard(hwnd_)) {
+        inPaste_ = false;
+        clipboard_.SetIgnoreNext(false);
+        return;
+    }
 
     // Small delay then simulate Ctrl+V
     // Use a timer to allow message processing
@@ -200,12 +273,14 @@ void App::OnTrayIcon(LPARAM lParam) {
         ShowTrayContextMenu();
         break;
     case WM_LBUTTONUP:
-        // Left click: show popup history
-        OnHotkey(HOTKEY_POPUP);
+        if (dblClickHandled_) {
+            dblClickHandled_ = false;
+        } else {
+            ShowNotes();
+        }
         break;
     case WM_LBUTTONDBLCLK:
-        // Double-click: show settings
-        ShowConfigDialog(hwnd_, settings_);
+        dblClickHandled_ = true;
         break;
     }
 }
@@ -231,6 +306,7 @@ void App::ShowTrayContextMenu() {
 
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(hMenu, MF_STRING, IDM_TRAY_SEARCH, L"&Search...");
+    AppendMenuW(hMenu, MF_STRING, IDM_TRAY_NOTES, L"&Notes...");
     AppendMenuW(hMenu, MF_STRING, IDM_TRAY_CLEAR_CURRENT, L"Clear C&urrent");
     AppendMenuW(hMenu, MF_STRING, IDM_TRAY_CLEAR_HISTORY, L"Clear &History");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
@@ -260,9 +336,13 @@ void App::ShowTrayContextMenu() {
     case IDM_TRAY_SETTINGS: {
         Settings oldSettings = settings_;
         if (ShowConfigDialog(hwnd_, settings_)) {
-            // Re-register hotkeys if changed
+            // Re-register hotkeys if any changed
             if (settings_.hotkeyModifiers != oldSettings.hotkeyModifiers ||
-                settings_.hotkeyVK != oldSettings.hotkeyVK) {
+                settings_.hotkeyVK != oldSettings.hotkeyVK ||
+                settings_.searchHotkeyModifiers != oldSettings.searchHotkeyModifiers ||
+                settings_.searchHotkeyVK != oldSettings.searchHotkeyVK ||
+                settings_.notesHotkeyModifiers != oldSettings.notesHotkeyModifiers ||
+                settings_.notesHotkeyVK != oldSettings.notesHotkeyVK) {
                 UnregisterHotkeys();
                 RegisterHotkeys();
             }
@@ -290,6 +370,9 @@ void App::ShowTrayContextMenu() {
     case IDM_TRAY_ABOUT:
         ShowAbout();
         break;
+    case IDM_TRAY_NOTES:
+        ShowNotes();
+        break;
     case IDM_TRAY_EXIT:
         PostQuitMessage(0);
         break;
@@ -304,6 +387,12 @@ void App::UpdateTooltip() {
     } else {
         tray_.SetTooltip(L"XClip - Clipboard Manager");
     }
+}
+
+void App::ShowNotes() {
+    ShowNotesManager(hwnd_, notes_);
+    // Auto-save after closing the dialog
+    notes_.SaveToFile(settings_.notesPath);
 }
 
 void App::ShowAbout() {
@@ -321,7 +410,10 @@ void App::ShowAbout() {
 LRESULT App::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_CLIPBOARDUPDATE:
-        OnClipboardUpdate();
+        // Debounce: screenshots and some apps trigger multiple rapid updates.
+        // Restart a short timer — only capture when it fires.
+        KillTimer(hwnd, 102);
+        SetTimer(hwnd, 102, 200, nullptr);
         return 0;
 
     case WM_HOTKEY:
@@ -330,6 +422,14 @@ LRESULT App::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
     case WM_TRAYICON:
         OnTrayIcon(lParam);
+        return 0;
+
+    case WM_MENUSELECT:
+        popup_.OnMenuSelect(hwnd, wParam, lParam);
+        return 0;
+
+    case WM_UNINITMENUPOPUP:
+        popup_.OnMenuClose();
         return 0;
 
     case WM_TIMER:
@@ -341,6 +441,10 @@ LRESULT App::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         } else if (wParam == 101) {
             KillTimer(hwnd, 101);
             inPaste_ = false;
+        } else if (wParam == 102) {
+            // Debounced clipboard capture
+            KillTimer(hwnd, 102);
+            OnClipboardUpdate();
         }
         return 0;
 

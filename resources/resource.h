@@ -14,6 +14,7 @@
 #define IDM_TRAY_AUTOSTART      1006
 #define IDM_TRAY_ABOUT          1007
 #define IDM_TRAY_EXIT           1008
+#define IDM_TRAY_NOTES          1009
 
 // History popup item base ID (items are IDM_CLIP_BASE + index)
 #define IDM_CLIP_BASE           2000
@@ -23,6 +24,7 @@
 #define IDM_CLIP_EDIT           3001
 #define IDM_CLIP_DELETE         3002
 #define IDM_CLIP_DELETE_ALL     3003
+#define IDM_CLIP_SEARCH_MORE    3004
 
 // Config dialog
 #define IDD_CONFIG              4000
@@ -43,9 +45,12 @@
 #define IDC_SHOW_PREVIEW        4201
 #define IDC_MAX_DISPLAY_LEN     4202
 #define IDC_SHOW_ACCELERATORS   4203
+#define IDC_TRAY_CLICK_ACTION   4204
 
 // Config controls - Hotkeys
 #define IDC_HOTKEY_POPUP        4300
+#define IDC_HOTKEY_SEARCH       4301
+#define IDC_HOTKEY_NOTES        4302
 
 // Search dialog
 #define IDD_SEARCH              5000
@@ -59,5 +64,18 @@
 #define WM_TRAYICON             (WM_USER + 1)
 #define WM_CLIPBOARDUPDATE_CUSTOM (WM_USER + 2)
 
+// Notes
+#define IDD_NOTES_MANAGER       7000
+#define IDC_NOTES_LIST          7001
+#define IDC_NOTES_NEW           7002
+#define IDC_NOTES_EDIT          7003
+#define IDC_NOTES_DELETE        7004
+#define IDC_NOTES_PASTE         7005
+#define IDD_NOTES_EDITOR        7100
+#define IDC_NOTES_TITLE         7101
+#define IDC_NOTES_CONTENT       7102
+
 // Hotkey IDs
 #define HOTKEY_POPUP            1
+#define HOTKEY_SEARCH           2
+#define HOTKEY_NOTES            3

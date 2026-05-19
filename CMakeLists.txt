@@ -15,6 +15,7 @@ add_executable(XClip WIN32
     src/settings.cpp
     src/config_dialog.cpp
     src/search_dialog.cpp
+    src/notes.cpp
     src/utils.cpp
     resources/xclip.rc
 )

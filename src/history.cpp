@@ -69,8 +69,31 @@ bool ClipEntry::Matches(const ClipEntry& other) const {
         return text == other.text;
     case ClipType::Files:
         return files == other.files;
-    case ClipType::Bitmap:
-        return false; // Bitmaps are never duplicates
+    case ClipType::Bitmap: {
+        if (!hBitmap || !other.hBitmap) return false;
+        BITMAP bm1, bm2;
+        GetObject(hBitmap, sizeof(bm1), &bm1);
+        GetObject(other.hBitmap, sizeof(bm2), &bm2);
+        // Different dimensions → definitely different
+        if (bm1.bmWidth != bm2.bmWidth || bm1.bmHeight != bm2.bmHeight) return false;
+        // Compare first 4096 bytes of pixel data (fast heuristic, sufficient for screenshots)
+        int stride1 = ((bm1.bmWidth * 32 + 31) / 32) * 4;
+        size_t dataSize = (size_t)stride1 * bm1.bmHeight;
+        size_t cmpSize = (std::min)(dataSize, (size_t)4096);
+        std::vector<BYTE> buf1(cmpSize), buf2(cmpSize);
+        BITMAPINFOHEADER bi = {};
+        bi.biSize = sizeof(bi);
+        bi.biWidth = bm1.bmWidth;
+        bi.biHeight = bm1.bmHeight;
+        bi.biPlanes = 1;
+        bi.biBitCount = 32;
+        bi.biCompression = BI_RGB;
+        HDC hdc = GetDC(nullptr);
+        GetDIBits(hdc, hBitmap, 0, bm1.bmHeight, buf1.data(), (BITMAPINFO*)&bi, DIB_RGB_COLORS);
+        GetDIBits(hdc, other.hBitmap, 0, bm2.bmHeight, buf2.data(), (BITMAPINFO*)&bi, DIB_RGB_COLORS);
+        ReleaseDC(nullptr, hdc);
+        return memcmp(buf1.data(), buf2.data(), cmpSize) == 0;
+    }
     }
     return false;
 }
@@ -441,8 +464,9 @@ bool History::LoadFromFile(const std::wstring& path) {
     if (count > 10000) { CloseHandle(hFile); return false; } // Sanity check
 
     entries_.clear();
+    bool readOk = true;
 
-    for (DWORD i = 0; i < count; i++) {
+    for (DWORD i = 0; i < count && readOk; i++) {
         auto entry = std::make_unique<ClipEntry>();
         entry->type = (ClipType)readU32();
 
@@ -450,14 +474,14 @@ bool History::LoadFromFile(const std::wstring& path) {
         DWORD textLen = readU32();
         if (textLen > 0 && textLen < 10000000) {
             entry->text.resize(textLen);
-            if (!readBytes(entry->text.data(), textLen * sizeof(wchar_t))) break;
+            if (!readBytes(entry->text.data(), textLen * sizeof(wchar_t))) { readOk = false; break; }
         }
 
         // Bitmap
         DWORD bmpDataSize = readU32();
         if (bmpDataSize > 0 && bmpDataSize < 100000000) {
             std::vector<BYTE> bmpData(bmpDataSize);
-            if (!readBytes(bmpData.data(), bmpDataSize)) break;
+            if (!readBytes(bmpData.data(), bmpDataSize)) { readOk = false; break; }
 
             if (bmpDataSize >= sizeof(BITMAPINFOHEADER)) {
                 BITMAPINFOHEADER* pbi = (BITMAPINFOHEADER*)bmpData.data();
@@ -479,23 +503,30 @@ bool History::LoadFromFile(const std::wstring& path) {
 
         // Files
         DWORD fileCount = readU32();
-        if (fileCount > 10000) break; // Sanity
+        if (fileCount > 10000) { readOk = false; break; }
         for (DWORD f = 0; f < fileCount; f++) {
             DWORD fLen = readU32();
             if (fLen > 0 && fLen < 10000000) {
                 std::wstring file(fLen, L'\0');
-                if (!readBytes(file.data(), fLen * sizeof(wchar_t))) break;
+                if (!readBytes(file.data(), fLen * sizeof(wchar_t))) { readOk = false; break; }
                 entry->files.push_back(std::move(file));
             }
         }
+        if (!readOk) break;
 
         // Timestamp
-        readBytes(&entry->timestamp, sizeof(FILETIME));
+        if (!readBytes(&entry->timestamp, sizeof(FILETIME))) { readOk = false; break; }
 
         entries_.push_back(std::move(entry));
     }
 
     CloseHandle(hFile);
+
+    if (!readOk) {
+        entries_.clear();
+        return false;
+    }
+
     TrimToSize();
     return true;
 }

@@ -3,9 +3,15 @@
 #include "app.h"
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
-    // Write debug log to help diagnose startup issues
+    // Write debug log next to the executable
     auto logDebug = [](const wchar_t* msg) {
-        HANDLE hFile = CreateFileW(L"C:\\Users\\D063239\\Desktop\\XClip\\debug.log",
+        wchar_t exePath[MAX_PATH];
+        GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+        std::wstring logPath(exePath);
+        auto pos = logPath.find_last_of(L'\\');
+        if (pos != std::wstring::npos) logPath = logPath.substr(0, pos);
+        logPath += L"\\debug.log";
+        HANDLE hFile = CreateFileW(logPath.c_str(),
             FILE_APPEND_DATA, FILE_SHARE_READ, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (hFile != INVALID_HANDLE_VALUE) {
             DWORD written;
@@ -27,6 +33,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     }
     logDebug(L"Mutex acquired.");
 
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     logDebug(L"COM initialized.");
 
     App& app = App::Instance();

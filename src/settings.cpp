@@ -15,14 +15,15 @@ void Settings::InitPaths() {
     std::wstring appDir = Utils::GetAppDataPath();
     iniPath = appDir + L"\\xclip.ini";
     historyPath = appDir + L"\\history.dat";
+    notesPath = appDir + L"\\notes.dat";
 }
 
 void Settings::Load() {
     InitPaths();
 
-    maxHistorySize = ReadInt(iniPath, L"General", L"MaxHistorySize", 25);
+    maxHistorySize = ReadInt(iniPath, L"General", L"MaxHistorySize", 1000);
     if (maxHistorySize < 1) maxHistorySize = 1;
-    if (maxHistorySize > 500) maxHistorySize = 500;
+    if (maxHistorySize > 5000) maxHistorySize = 5000;
 
     ignoreDuplicates = ReadInt(iniPath, L"General", L"IgnoreDuplicates", 1) != 0;
     saveHistory = ReadInt(iniPath, L"General", L"SaveHistory", 1) != 0;
@@ -35,9 +36,17 @@ void Settings::Load() {
     if (maxDisplayLength < 10) maxDisplayLength = 10;
     if (maxDisplayLength > 200) maxDisplayLength = 200;
     showAccelerators = ReadInt(iniPath, L"Popup", L"ShowAccelerators", 1) != 0;
+    trayClickAction = ReadInt(iniPath, L"Popup", L"TrayClickAction", 1);
+    if (trayClickAction < 0 || trayClickAction > 1) trayClickAction = 1;
 
     hotkeyModifiers = (UINT)ReadInt(iniPath, L"Hotkey", L"Modifiers", MOD_CONTROL | MOD_SHIFT);
     hotkeyVK = (UINT)ReadInt(iniPath, L"Hotkey", L"VK", 'V');
+
+    searchHotkeyModifiers = (UINT)ReadInt(iniPath, L"Hotkey", L"SearchModifiers", MOD_CONTROL | MOD_SHIFT);
+    searchHotkeyVK = (UINT)ReadInt(iniPath, L"Hotkey", L"SearchVK", 'S');
+
+    notesHotkeyModifiers = (UINT)ReadInt(iniPath, L"Hotkey", L"NotesModifiers", MOD_CONTROL | MOD_SHIFT);
+    notesHotkeyVK = (UINT)ReadInt(iniPath, L"Hotkey", L"NotesVK", 'N');
 }
 
 void Settings::Save() const {
@@ -50,9 +59,16 @@ void Settings::Save() const {
     WriteInt(iniPath, L"Popup", L"ShowPreviewTooltips", showPreviewTooltips ? 1 : 0);
     WriteInt(iniPath, L"Popup", L"MaxDisplayLength", maxDisplayLength);
     WriteInt(iniPath, L"Popup", L"ShowAccelerators", showAccelerators ? 1 : 0);
+    WriteInt(iniPath, L"Popup", L"TrayClickAction", trayClickAction);
 
     WriteInt(iniPath, L"Hotkey", L"Modifiers", (int)hotkeyModifiers);
     WriteInt(iniPath, L"Hotkey", L"VK", (int)hotkeyVK);
+
+    WriteInt(iniPath, L"Hotkey", L"SearchModifiers", (int)searchHotkeyModifiers);
+    WriteInt(iniPath, L"Hotkey", L"SearchVK", (int)searchHotkeyVK);
+
+    WriteInt(iniPath, L"Hotkey", L"NotesModifiers", (int)notesHotkeyModifiers);
+    WriteInt(iniPath, L"Hotkey", L"NotesVK", (int)notesHotkeyVK);
 }
 
 static const wchar_t* kRunKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";

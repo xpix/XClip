@@ -50,7 +50,6 @@ std::wstring EscapeAmpersand(const std::wstring& str) {
 
 std::wstring FormatTime(const FILETIME& ft) {
     SYSTEMTIME st;
-    FileTimeToLocalFileTime(&ft, nullptr);
     FILETIME localFt;
     FileTimeToLocalFileTime(&ft, &localFt);
     FileTimeToSystemTime(&localFt, &st);
@@ -99,6 +98,37 @@ SIZE GetBitmapSize(HBITMAP hbm) {
     BITMAP bm = {};
     if (hbm) GetObject(hbm, sizeof(bm), &bm);
     return { bm.bmWidth, bm.bmHeight };
+}
+
+void SaveWindowPos(HWND hwnd, const wchar_t* section) {
+    RECT rc;
+    if (!GetWindowRect(hwnd, &rc)) return;
+    std::wstring iniPath = GetAppDataPath() + L"\\xclip.ini";
+    auto writeInt = [&](const wchar_t* key, int val) {
+        wchar_t buf[32];
+        wsprintfW(buf, L"%d", val);
+        WritePrivateProfileStringW(section, key, buf, iniPath.c_str());
+    };
+    writeInt(L"X", rc.left);
+    writeInt(L"Y", rc.top);
+    writeInt(L"W", rc.right - rc.left);
+    writeInt(L"H", rc.bottom - rc.top);
+}
+
+void RestoreWindowPos(HWND hwnd, const wchar_t* section) {
+    std::wstring iniPath = GetAppDataPath() + L"\\xclip.ini";
+    int x = GetPrivateProfileIntW(section, L"X", INT_MIN, iniPath.c_str());
+    int y = GetPrivateProfileIntW(section, L"Y", INT_MIN, iniPath.c_str());
+    int w = GetPrivateProfileIntW(section, L"W", 0, iniPath.c_str());
+    int h = GetPrivateProfileIntW(section, L"H", 0, iniPath.c_str());
+    if (x == INT_MIN || y == INT_MIN || w <= 0 || h <= 0) return;
+
+    // Validate that the position is on a visible monitor
+    RECT rc = { x, y, x + w, y + h };
+    HMONITOR hMon = MonitorFromRect(&rc, MONITOR_DEFAULTTONULL);
+    if (!hMon) return;
+
+    SetWindowPos(hwnd, nullptr, x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
 }
 
 } // namespace Utils

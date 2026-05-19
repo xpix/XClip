@@ -71,6 +71,13 @@ static INT_PTR CALLBACK SearchDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM
         HWND children[] = { hEdit, hList, hOk, hCancel };
         for (HWND h : children) SendMessage(h, WM_SETFONT, (WPARAM)hFont, TRUE);
 
+        // Trigger initial layout to match actual window size
+        SendMessage(hDlg, WM_SIZE, SIZE_RESTORED, 0);
+
+        Utils::RestoreWindowPos(hDlg, L"WndPos_Search");
+        // Re-trigger layout after position restore
+        SendMessage(hDlg, WM_SIZE, SIZE_RESTORED, 0);
+
         // Populate list
         UpdateSearchResults(hDlg, data);
 
@@ -92,6 +99,7 @@ static INT_PTR CALLBACK SearchDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM
                 int sel = ListBox_GetCurSel(GetDlgItem(hDlg, IDC_SEARCH_LIST));
                 if (sel >= 0 && sel < (int)data->filteredIndices.size()) {
                     data->selectedIndex = data->filteredIndices[sel];
+                    Utils::SaveWindowPos(hDlg, L"WndPos_Search");
                     EndDialog(hDlg, IDOK);
                 }
             }
@@ -101,18 +109,51 @@ static INT_PTR CALLBACK SearchDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM
             int sel = ListBox_GetCurSel(GetDlgItem(hDlg, IDC_SEARCH_LIST));
             if (sel >= 0 && sel < (int)data->filteredIndices.size()) {
                 data->selectedIndex = data->filteredIndices[sel];
+                Utils::SaveWindowPos(hDlg, L"WndPos_Search");
                 EndDialog(hDlg, IDOK);
             }
             break;
         }
 
         case IDCANCEL:
+            Utils::SaveWindowPos(hDlg, L"WndPos_Search");
             EndDialog(hDlg, IDCANCEL);
             break;
         }
         return TRUE;
 
+    case WM_SIZE: {
+        if (wParam == SIZE_MINIMIZED) break;
+        RECT rc;
+        GetClientRect(hDlg, &rc);
+        int w = rc.right - rc.left;
+        int h = rc.bottom - rc.top;
+
+        HWND hEdit = GetDlgItem(hDlg, IDC_SEARCH_EDIT);
+        HWND hList = GetDlgItem(hDlg, IDC_SEARCH_LIST);
+
+        // Edit field: stretch width, keep at top
+        MoveWindow(hEdit, 65, 10, w - 85, 22, TRUE);
+        // List: fill remaining space, leave room for buttons at bottom
+        MoveWindow(hList, 10, 42, w - 20, h - 82, TRUE);
+        // Buttons: anchored to bottom-right
+        HWND hOk = GetDlgItem(hDlg, IDOK);
+        HWND hCancel = GetDlgItem(hDlg, IDCANCEL);
+        MoveWindow(hOk, w - 170, h - 34, 75, 28, TRUE);
+        MoveWindow(hCancel, w - 85, h - 34, 75, 28, TRUE);
+        InvalidateRect(hDlg, nullptr, TRUE);
+        return TRUE;
+    }
+
+    case WM_GETMINMAXINFO: {
+        MINMAXINFO* mmi = (MINMAXINFO*)lParam;
+        mmi->ptMinTrackSize.x = 300;
+        mmi->ptMinTrackSize.y = 200;
+        return TRUE;
+    }
+
     case WM_CLOSE:
+        Utils::SaveWindowPos(hDlg, L"WndPos_Search");
         EndDialog(hDlg, IDCANCEL);
         return TRUE;
     }
@@ -140,7 +181,7 @@ static std::vector<BYTE> CreateSearchDialogTemplate() {
         memcpy(buf.data() + pos, s, len * 2);
     };
 
-    DWORD style = WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME | DS_CENTER;
+    DWORD style = WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | DS_CENTER;
     pushDword(style);
     pushDword(0);           // extended style
     pushWord(0);            // no controls (added in WM_INITDIALOG)

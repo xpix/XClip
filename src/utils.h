@@ -29,4 +29,8 @@ HBITMAP CreateThumbnail(HBITMAP hbm, int maxWidth, int maxHeight);
 // Get bitmap dimensions
 SIZE GetBitmapSize(HBITMAP hbm);
 
+// Save/restore window position to/from INI file
+void SaveWindowPos(HWND hwnd, const wchar_t* section);
+void RestoreWindowPos(HWND hwnd, const wchar_t* section);
+
 } // namespace Utils

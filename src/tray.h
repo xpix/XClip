@@ -9,6 +9,7 @@ public:
     void Destroy();
     void SetTooltip(const std::wstring& text);
     void SetIcon(HICON hIcon);
+    void ShowBalloon(const wchar_t* title, const wchar_t* text, DWORD flags = NIIF_INFO);
 
     HWND GetHwnd() const { return hwnd_; }
 

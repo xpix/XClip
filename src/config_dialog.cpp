@@ -147,6 +147,18 @@ static INT_PTR CALLBACK PopupPageProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM
             GetModuleHandle(nullptr), nullptr);
         SetWindowTextW(hLen, std::to_wstring(data->settings->maxDisplayLength).c_str());
 
+        CreateWindowW(L"STATIC", L"Tray left-click:",
+            WS_CHILD | WS_VISIBLE, 20, 150, 130, 20, hDlg, nullptr,
+            GetModuleHandle(nullptr), nullptr);
+
+        HWND hTrayClick = CreateWindowW(L"COMBOBOX", L"",
+            WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST,
+            160, 148, 150, 100, hDlg, (HMENU)(INT_PTR)IDC_TRAY_CLICK_ACTION,
+            GetModuleHandle(nullptr), nullptr);
+        ComboBox_AddString(hTrayClick, L"Show popup history");
+        ComboBox_AddString(hTrayClick, L"Show search dialog");
+        ComboBox_SetCurSel(hTrayClick, data->settings->trayClickAction);
+
         HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
         EnumChildWindows(hDlg, [](HWND hwnd, LPARAM lp) -> BOOL {
             SendMessage(hwnd, WM_SETFONT, (WPARAM)lp, TRUE);
@@ -170,6 +182,9 @@ static INT_PTR CALLBACK PopupPageProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM
             int len = _wtoi(buf);
             if (len >= 10 && len <= 200) data->settings->maxDisplayLength = len;
 
+            data->settings->trayClickAction =
+                ComboBox_GetCurSel(GetDlgItem(hDlg, IDC_TRAY_CLICK_ACTION));
+
             data->changed = true;
             SetWindowLongPtr(hDlg, DWLP_MSGRESULT, PSNRET_NOERROR);
             return TRUE;
@@ -178,6 +193,24 @@ static INT_PTR CALLBACK PopupPageProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM
     }
     }
     return FALSE;
+}
+
+// Helper to convert MOD_ flags to HOTKEYF_ flags
+static WORD ModToHotkeyF(UINT mod) {
+    WORD hk = 0;
+    if (mod & MOD_SHIFT) hk |= HOTKEYF_SHIFT;
+    if (mod & MOD_CONTROL) hk |= HOTKEYF_CONTROL;
+    if (mod & MOD_ALT) hk |= HOTKEYF_ALT;
+    return hk;
+}
+
+// Helper to convert HOTKEYF_ flags to MOD_ flags
+static UINT HotkeyFToMod(BYTE hk) {
+    UINT mod = 0;
+    if (hk & HOTKEYF_SHIFT) mod |= MOD_SHIFT;
+    if (hk & HOTKEYF_CONTROL) mod |= MOD_CONTROL;
+    if (hk & HOTKEYF_ALT) mod |= MOD_ALT;
+    return mod;
 }
 
 // ---- Hotkeys Page ----
@@ -189,21 +222,38 @@ static INT_PTR CALLBACK HotkeysPageProc(HWND hDlg, UINT msg, WPARAM wParam, LPAR
         PROPSHEETPAGE* psp = (PROPSHEETPAGE*)lParam;
         data = (ConfigDlgData*)psp->lParam;
 
+        // Popup hotkey
         CreateWindowW(L"STATIC", L"Popup hotkey:",
             WS_CHILD | WS_VISIBLE, 20, 20, 130, 20, hDlg, nullptr,
             GetModuleHandle(nullptr), nullptr);
-
-        HWND hHotkey = CreateWindowW(HOTKEY_CLASSW, L"",
+        HWND hHkPopup = CreateWindowW(HOTKEY_CLASSW, L"",
             WS_CHILD | WS_VISIBLE | WS_BORDER,
             160, 18, 180, 24, hDlg, (HMENU)(INT_PTR)IDC_HOTKEY_POPUP,
             GetModuleHandle(nullptr), nullptr);
+        SendMessage(hHkPopup, HKM_SETHOTKEY,
+            MAKEWORD(data->settings->hotkeyVK, ModToHotkeyF(data->settings->hotkeyModifiers)), 0);
 
-        // Convert MOD_ flags to HOTKEYF_ flags for the control
-        WORD hkMod = 0;
-        if (data->settings->hotkeyModifiers & MOD_SHIFT) hkMod |= HOTKEYF_SHIFT;
-        if (data->settings->hotkeyModifiers & MOD_CONTROL) hkMod |= HOTKEYF_CONTROL;
-        if (data->settings->hotkeyModifiers & MOD_ALT) hkMod |= HOTKEYF_ALT;
-        SendMessage(hHotkey, HKM_SETHOTKEY, MAKEWORD(data->settings->hotkeyVK, hkMod), 0);
+        // Search hotkey
+        CreateWindowW(L"STATIC", L"Search hotkey:",
+            WS_CHILD | WS_VISIBLE, 20, 55, 130, 20, hDlg, nullptr,
+            GetModuleHandle(nullptr), nullptr);
+        HWND hHkSearch = CreateWindowW(HOTKEY_CLASSW, L"",
+            WS_CHILD | WS_VISIBLE | WS_BORDER,
+            160, 53, 180, 24, hDlg, (HMENU)(INT_PTR)IDC_HOTKEY_SEARCH,
+            GetModuleHandle(nullptr), nullptr);
+        SendMessage(hHkSearch, HKM_SETHOTKEY,
+            MAKEWORD(data->settings->searchHotkeyVK, ModToHotkeyF(data->settings->searchHotkeyModifiers)), 0);
+
+        // Notes hotkey
+        CreateWindowW(L"STATIC", L"Notes hotkey:",
+            WS_CHILD | WS_VISIBLE, 20, 90, 130, 20, hDlg, nullptr,
+            GetModuleHandle(nullptr), nullptr);
+        HWND hHkNotes = CreateWindowW(HOTKEY_CLASSW, L"",
+            WS_CHILD | WS_VISIBLE | WS_BORDER,
+            160, 88, 180, 24, hDlg, (HMENU)(INT_PTR)IDC_HOTKEY_NOTES,
+            GetModuleHandle(nullptr), nullptr);
+        SendMessage(hHkNotes, HKM_SETHOTKEY,
+            MAKEWORD(data->settings->notesHotkeyVK, ModToHotkeyF(data->settings->notesHotkeyModifiers)), 0);
 
         HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
         EnumChildWindows(hDlg, [](HWND hwnd, LPARAM lp) -> BOOL {
@@ -216,18 +266,31 @@ static INT_PTR CALLBACK HotkeysPageProc(HWND hDlg, UINT msg, WPARAM wParam, LPAR
     case WM_NOTIFY: {
         NMHDR* pnm = (NMHDR*)lParam;
         if (pnm->code == PSN_APPLY) {
-            HWND hHotkey = GetDlgItem(hDlg, IDC_HOTKEY_POPUP);
-            LRESULT hk = SendMessage(hHotkey, HKM_GETHOTKEY, 0, 0);
+            // Popup hotkey
+            LRESULT hk = SendMessage(GetDlgItem(hDlg, IDC_HOTKEY_POPUP), HKM_GETHOTKEY, 0, 0);
             BYTE vk = LOBYTE(LOWORD(hk));
             BYTE mod = HIBYTE(LOWORD(hk));
-
             if (vk != 0) {
-                UINT modifiers = 0;
-                if (mod & HOTKEYF_SHIFT) modifiers |= MOD_SHIFT;
-                if (mod & HOTKEYF_CONTROL) modifiers |= MOD_CONTROL;
-                if (mod & HOTKEYF_ALT) modifiers |= MOD_ALT;
-                data->settings->hotkeyModifiers = modifiers;
+                data->settings->hotkeyModifiers = HotkeyFToMod(mod);
                 data->settings->hotkeyVK = vk;
+            }
+
+            // Search hotkey
+            hk = SendMessage(GetDlgItem(hDlg, IDC_HOTKEY_SEARCH), HKM_GETHOTKEY, 0, 0);
+            vk = LOBYTE(LOWORD(hk));
+            mod = HIBYTE(LOWORD(hk));
+            if (vk != 0) {
+                data->settings->searchHotkeyModifiers = HotkeyFToMod(mod);
+                data->settings->searchHotkeyVK = vk;
+            }
+
+            // Notes hotkey
+            hk = SendMessage(GetDlgItem(hDlg, IDC_HOTKEY_NOTES), HKM_GETHOTKEY, 0, 0);
+            vk = LOBYTE(LOWORD(hk));
+            mod = HIBYTE(LOWORD(hk));
+            if (vk != 0) {
+                data->settings->notesHotkeyModifiers = HotkeyFToMod(mod);
+                data->settings->notesHotkeyVK = vk;
             }
 
             data->changed = true;

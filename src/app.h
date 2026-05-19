@@ -6,6 +6,7 @@
 #include "hotkey.h"
 #include "popup.h"
 #include "settings.h"
+#include "notes.h"
 
 class App {
 public:
@@ -35,6 +36,7 @@ private:
     void PasteEntry(int index);
     void UpdateTooltip();
     void ShowAbout();
+    void ShowNotes();
 
     HINSTANCE hInstance_ = nullptr;
     HWND hwnd_ = nullptr;
@@ -46,6 +48,9 @@ private:
     TrayIcon tray_;
     HotkeyManager hotkeys_;
     PopupMenu popup_;
+    NotesManager notes_;
 
     bool inPaste_ = false; // Flag to avoid capturing our own paste
+    bool shutdownDone_ = false;
+    bool dblClickHandled_ = false; // Suppress WM_LBUTTONUP after double-click
 };
