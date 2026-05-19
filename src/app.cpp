@@ -5,6 +5,9 @@
 #include "../resources/resource.h"
 #include <commctrl.h>
 
+// We use a hidden window to receive clipboard update notifications and hotkey events. 
+// The main App class manages the clipboard history, system tray icon, and user interactions.
+
 static const wchar_t* kWindowClass = L"XCLIP_MAIN";
 static const wchar_t* kMutexName = L"XClip_SingleInstance_Mutex";
 static UINT WM_TASKBAR_CREATED = 0;
